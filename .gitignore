@@ -1,0 +1,11 @@
+build/
+build_*/
+*.ppm
+*.bmp
+*.wav
+*.sav
+profile.txt
+/roms
+/bios/*.bin
+/device_backup
+/.vscode
