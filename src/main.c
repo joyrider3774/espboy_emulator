@@ -47,6 +47,7 @@ static const char *help_text[] = {
     "F1               this help",
     "F2               reset",
     "F3               open a program",
+    "R                turn the screen 90 degrees (d-pad follows)",
     "P  /  hold Tab   pause / fast forward",
     "+ / -            volume",
     "F6               record a GIF / stop and save it",
@@ -83,6 +84,7 @@ typedef struct {
     bool rom_ok;
     bool loaded, paused, help, stats;
     bool integer_scale;
+    int rotation;           /* R: the screen turned clockwise by this many quarter turns */
     char message[256];
     Uint64 message_until;
     Uint64 last_ticks;
@@ -114,8 +116,9 @@ static void set_scale_mode(App *app)
     SDL_SetTextureScaleMode(app->screen, app->integer_scale ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_PIXELART);
 }
 
-/* The scaling choice and the volume are kept between runs: natively in
-   settings.txt in SDL's per-user folder, in the browser in localStorage */
+/* The scaling choice, the volume and the speaker filter are kept between
+   runs: natively in settings.txt in SDL's per-user folder, in the browser in
+   localStorage. The screen's turn is kept per program (load_rotation) */
 #define SETTINGS_ORG "joyrider3774"
 #define SETTINGS_APP "espboy_emulator"
 
@@ -168,6 +171,84 @@ static void save_settings(App *app)
         SDL_SaveFile(path, text, SDL_strlen(text));
         SDL_free(dir);
     }
+#endif
+}
+
+/* The screen's turn (R) is kept per program, by its file name: natively as
+   "name<TAB>quarter turns" lines in rotations.txt in SDL's per-user folder
+   (a program not listed is not turned), in the browser in localStorage
+   ("espboy_rotation:<name>") */
+static const char *program_name(const App *app)
+{
+    const char *name = SDL_strrchr(app->program, '/');
+    const char *bname = SDL_strrchr(app->program, '\\');
+    if (bname > name) name = bname;
+    return name ? name + 1 : app->program;
+}
+
+static void load_rotation(App *app)
+{
+    app->rotation = 0;
+#ifdef __EMSCRIPTEN__
+    app->rotation = EM_ASM_INT({
+        try { return parseInt(localStorage.getItem('espboy_rotation:' + UTF8ToString($0))) || 0; } catch (e) { return 0; }
+    }, program_name(app)) & 3;
+#else
+    char *dir = SDL_GetPrefPath(SETTINGS_ORG, SETTINGS_APP);
+    if (!dir) return;
+    char path[1024];
+    SDL_snprintf(path, sizeof path, "%srotations.txt", dir);
+    SDL_free(dir);
+    char *text = SDL_LoadFile(path, NULL);
+    if (!text) return;
+    const char *name = program_name(app);
+    const size_t len = SDL_strlen(name);
+    for (char *line = text; *line; ) {
+        char *end = SDL_strchr(line, '\n');
+        if (!SDL_strncmp(line, name, len) && line[len] == '\t') app->rotation = SDL_atoi(line + len + 1) & 3;
+        if (!end) break;
+        line = end + 1;
+    }
+    SDL_free(text);
+#endif
+}
+
+static void save_rotation(App *app)
+{
+    if (!app->loaded) return;
+#ifdef __EMSCRIPTEN__
+    EM_ASM({ try { var k = 'espboy_rotation:' + UTF8ToString($0);
+                   if ($1) localStorage.setItem(k, String($1)); else localStorage.removeItem(k); } catch (e) {} },
+           program_name(app), app->rotation);
+#else
+    char *dir = SDL_GetPrefPath(SETTINGS_ORG, SETTINGS_APP);
+    if (!dir) return;
+    char path[1024];
+    SDL_snprintf(path, sizeof path, "%srotations.txt", dir);
+    SDL_free(dir);
+    const char *name = program_name(app);
+    const size_t len = SDL_strlen(name);
+    char *old = SDL_LoadFile(path, NULL);
+    const size_t cap = (old ? SDL_strlen(old) : 0) + len + 16;
+    char *out = SDL_malloc(cap);
+    if (!out) { SDL_free(old); return; }
+    size_t n = 0;
+    /* the other programs' lines as they were, this one's dropped... */
+    for (char *line = old; line && *line; ) {
+        char *end = SDL_strchr(line, '\n');
+        const size_t l = end ? (size_t)(end - line) + 1 : SDL_strlen(line);
+        if (!(!SDL_strncmp(line, name, len) && line[len] == '\t')) {
+            SDL_memcpy(out + n, line, l);
+            n += l;
+            if (!end) out[n++] = '\n';
+        }
+        line += l;
+    }
+    /* ...and written again when it is turned */
+    if (app->rotation) n += (size_t)SDL_snprintf(out + n, cap - n, "%s\t%d\n", name, app->rotation);
+    SDL_SaveFile(path, out, n);
+    SDL_free(out);
+    SDL_free(old);
 #endif
 }
 
@@ -267,6 +348,7 @@ static bool load_program(App *app, const char *path)
     }
     SDL_strlcpy(app->program, path, sizeof app->program);
     load_flash_save(app);
+    load_rotation(app);         /* how this program's screen was turned last time */
     power_on(app);
     app->loaded = true;
 
@@ -468,6 +550,20 @@ static void gif_capture(App *app)
     }
 }
 
+/* The d-pad as the turned screen has it (R): a direction pressed is the
+   one that points that way on the window. With the screen a quarter turn
+   clockwise the device's top is on the right, so up on the keyboard is the
+   device's left, right is its up, and so on. The other buttons stay */
+static uint8_t rotate_dpad(uint8_t b, int rotation)
+{
+    static const uint8_t ring[4] = { KEY_UP, KEY_RIGHT, KEY_DOWN, KEY_LEFT };   /* clockwise */
+    if (!rotation) return b;
+    uint8_t out = b & (uint8_t)~(KEY_UP | KEY_RIGHT | KEY_DOWN | KEY_LEFT);
+    for (int i = 0; i < 4; i++)
+        if (b & ring[i]) out |= ring[(i - rotation + 4) % 4];
+    return out;
+}
+
 static void read_input(App *app)
 {
     const bool *k = SDL_GetKeyboardState(NULL);
@@ -502,7 +598,7 @@ static void read_input(App *app)
         if (gy < -0.5f) b |= KEY_UP;
         if (gy > 0.5f) b |= KEY_DOWN;
     }
-    app->s->buttons = b;
+    app->s->buttons = rotate_dpad(b, app->rotation);
 }
 
 /* The speaker's samples to the audio device (or dropped) */
@@ -610,10 +706,30 @@ static void draw_stats(App *app, int w)
         draw_text(r, x, 8 + 12.0f * (float)i, lines[i]);
 }
 
+/* The picture turned clockwise by app->rotation quarter turns (R), so what
+   is shown, recorded (F6) and saved (F10) is the screen as the player holds it */
+static void rotate_screen(App *app)
+{
+    static uint32_t turned[W * H];
+    if (!app->rotation) return;
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            int tx, ty;
+            switch (app->rotation) {
+            case 1: tx = H - 1 - y; ty = x; break;            /* 90 degrees clockwise */
+            case 2: tx = W - 1 - x; ty = H - 1 - y; break;    /* 180 */
+            default: tx = y; ty = W - 1 - x; break;           /* 270 */
+            }
+            turned[ty * W + tx] = app->pixels[y * W + x];
+        }
+    SDL_memcpy(app->pixels, turned, sizeof turned);
+}
+
 /* The glass as it is lit: the panel's picture times the backlight */
 static void render_screen(App *app)
 {
     st7735_render(&app->s->lcd, app->pixels);
+    rotate_screen(app);
     const float bl = backlight_level(&app->s->i2c);
     if (bl >= 0.999f) return;
     const uint32_t k = (uint32_t)(bl * 256.0f);
@@ -730,6 +846,11 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *e)
             }
             break;
         case SDLK_F3: open_dialog(app); break;
+        case SDLK_R:
+            app->rotation = (app->rotation + 1) & 3;
+            save_rotation(app);
+            show_message(app, "Screen turned %d degrees", app->rotation * 90);
+            break;
         case SDLK_P:
             app->paused = !app->paused;
             show_message(app, app->paused ? "Paused" : "Running");

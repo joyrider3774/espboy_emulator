@@ -56,6 +56,7 @@ also found next to the emulator, in the current folder, or via `--rom` / `$ESPBO
 | F1 | help |
 | F2 | reset |
 | F3 | open a program |
+| R | turn the screen 90 degrees clockwise; the d-pad turns with it (kept per game) |
 | P / hold Tab | pause / fast forward |
 | + / - | volume |
 | F6 | record a GIF; press again to stop and choose where to save it |
