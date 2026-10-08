@@ -60,7 +60,7 @@ On macOS the release builds keep the `bios` folder inside the app bundle
 | F1 | help |
 | F2 | reset |
 | F3 | open a program |
-| R | turn the screen 90 degrees clockwise; the d-pad turns with it (kept per game) |
+| R, gamepad north | turn the screen 90 degrees clockwise; the d-pad turns with it (kept per game) |
 | P / hold Tab | pause / fast forward |
 | + / - | volume |
 | F6 | record a GIF; press again to stop and choose where to save it |
@@ -70,7 +70,7 @@ On macOS the release builds keep the `bios` folder inside the app bundle
 | F10 | screenshot |
 | F11, Alt+Enter | fullscreen |
 
-A gamepad works too (d-pad or left stick, south = ACT, east = ESC, shoulders = side buttons).
+A gamepad works too (d-pad or left stick, south = ACT, east = ESC, shoulders = side buttons, north = turn the screen).
 The RGB LED shows at the bottom left.
 
 What a program writes to flash (EEPROM, LittleFS, SPIFFS saves) is kept in

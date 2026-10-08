@@ -46,7 +46,7 @@ static const char *help_text[] = {
     "F1               this help",
     "F2               reset",
     "F3               open a program",
-    "R                turn the screen 90 degrees (d-pad follows)",
+    "R, pad north     turn the screen 90 degrees (d-pad follows)",
     "P  /  hold Tab   pause / fast forward",
     "+ / -            volume",
     "F6               record a GIF / stop and save it",
@@ -810,6 +810,14 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
     return SDL_APP_CONTINUE;
 }
 
+/* R or the gamepad's north button: a quarter turn more, kept for this program */
+static void turn_screen(App *app)
+{
+    app->rotation = (app->rotation + 1) & 3;
+    save_rotation(app);
+    show_message(app, "Screen turned %d degrees", app->rotation * 90);
+}
+
 SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *e)
 {
     App *app = appstate;
@@ -830,6 +838,10 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *e)
                 app->pads[i] = NULL;
             }
         break;
+    case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+        /* north (Y on an Xbox pad) turns the screen, as R does */
+        if (e->gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) turn_screen(app);
+        break;
     case SDL_EVENT_KEY_DOWN:
         if (e->key.repeat) break;
         switch (e->key.key) {
@@ -845,11 +857,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *e)
             }
             break;
         case SDLK_F3: open_dialog(app); break;
-        case SDLK_R:
-            app->rotation = (app->rotation + 1) & 3;
-            save_rotation(app);
-            show_message(app, "Screen turned %d degrees", app->rotation * 90);
-            break;
+        case SDLK_R: turn_screen(app); break;
         case SDLK_P:
             app->paused = !app->paused;
             show_message(app, app->paused ? "Paused" : "Running");
