@@ -8,11 +8,20 @@ on:
 # CMakeLists.txt) and links it statically, so the emulator needs no SDL3 on
 # the machine it runs on. The web build uses Emscripten's own SDL3 port.
 #
-# The ESP8266 mask ROM the emulator boots through is Espressif's and is not
-# distributed: every build carries bios/README.md, which tells users how to
-# read it out of any ESP8266 board, in the bios folder the emulator looks in.
+# The ESP8266 mask ROM the emulator boots through is not in the repository.
+# Set ESP8266_ROM_URL in the repository settings (Settings > Secrets and
+# variables > Actions, as a secret or a variable) to a download address for
+# esp8266_rom.bin and every build fetches it, checks it (64 KB, the SHA-256
+# below) and puts it in the bios folder of the native builds and next to the
+# page of the web build. Without it the builds carry only bios/README.md, which
+# tells users how to read the ROM out of any ESP8266 board.
 
 name: Build
+
+env:
+  ESP8266_ROM_URL: ${{ secrets.ESP8266_ROM_URL || vars.ESP8266_ROM_URL }}
+  # the 64 KB mask ROM as read from an ESP8266EX (tools/get_rom.py)
+  ESP8266_ROM_SHA256: 32f199bf10da9a08c6c4e1b556b29c7606656b8a6d04e4f17d5afa74e5d98c68
 
 jobs:
   build:
@@ -41,6 +50,11 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v7
+
+      - name: Download the ESP8266 ROM
+        if: ${{ env.ESP8266_ROM_URL != '' }}
+        shell: bash
+        run: sh .github/get_rom.sh bios/esp8266_rom.bin
 
       - if: ${{ matrix.runsontype == 'windows'}}
         name: Setup Msys
@@ -89,6 +103,7 @@ jobs:
           # the ROM goes in a bios folder next to the .app (how to get it: bios/README.md)
           mkdir -p ./Release/bios
           cp bios/README.md ./Release/bios/
+          if [ -f bios/esp8266_rom.bin ]; then cp bios/esp8266_rom.bin ./Release/bios/; fi
           cp ./README.md ./LICENSE ./Release/
           P="$APP/Contents/Info.plist"
           echo "<?xml version='1.0' encoding='UTF-8'?>" > "$P"
@@ -115,6 +130,7 @@ jobs:
           cp "build/${{matrix.name}}${{matrix.binsuffix}}" "build/espboy_headless${{matrix.binsuffix}}" "./Release/${{matrix.name}}/"
           mkdir -p "./Release/${{matrix.name}}/bios"
           cp bios/README.md "./Release/${{matrix.name}}/bios/"
+          if [ -f bios/esp8266_rom.bin ]; then cp bios/esp8266_rom.bin "./Release/${{matrix.name}}/bios/"; fi
           cp ./README.md ./LICENSE "./Release/${{matrix.name}}/"
 
       - name: Store build
@@ -146,15 +162,21 @@ jobs:
           version: 6.0.4
           actions-cache-folder: 'emsdk-cache'
 
+      - name: Download the ESP8266 ROM
+        if: ${{ env.ESP8266_ROM_URL != '' }}
+        run: sh .github/get_rom.sh bios/esp8266_rom.bin
+
       - name: Build Emulator Web
-        run: ESPBOY_ROM=none sh tools/make_web.sh
+        # make_web.sh copies bios/esp8266_rom.bin next to the page when it is there
+        run: sh tools/make_web.sh
 
       - name: Copy Emulator Web
         run: |
           mkdir -p ./Release/ESPboy_Emulator-web
           cp build_web/ESPboy_Emulator.html build_web/ESPboy_Emulator.js build_web/ESPboy_Emulator.wasm \
              ./Release/ESPboy_Emulator-web/
-          # no ROM: esp8266_rom.bin goes next to the page (how to get it: ROM.md)
+          # esp8266_rom.bin goes next to the page (how to get it: ROM.md)
+          if [ -f build_web/esp8266_rom.bin ]; then cp build_web/esp8266_rom.bin ./Release/ESPboy_Emulator-web/; fi
           cp bios/README.md ./Release/ESPboy_Emulator-web/ROM.md
           cp ./README.md ./LICENSE ./Release/ESPboy_Emulator-web/
 

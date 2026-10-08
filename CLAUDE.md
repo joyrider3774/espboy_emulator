@@ -163,10 +163,14 @@ python tools/serial_test.py COM3 6 | grep TIMING     # device
   build of a game keeps its code and its EEPROM/LittleFS saves (`tests/sketches/savetest`:
   two games count separately, a 20 KB bigger build of game 1 keeps its count).
   `espboy_headless --save file` does the same.
-- **The ROM** is read at start from a file, never embedded or distributed: `bios/` (the folder
-  for it, with `bios/README.md` on how to read it from any board), the current folder, next to
-  the executable, `--rom`, `$ESPBOY_ROM`; in a macOS .app also next to the bundle and in a `bios`
-  folder there. CI artifacts carry `bios/README.md` only (owner's decision). `roms/` is for games.
+- **The ROM** is read at start from a file, never embedded in the program and not in the
+  repository: `bios/` (the folder for it, with `bios/README.md` on how to read it from any
+  board), the current folder, next to the executable, `--rom`, `$ESPBOY_ROM`; in a macOS .app
+  also next to the bundle and in a `bios` folder there. CI builds include it when the repository
+  setting `ESP8266_ROM_URL` (secret or variable) is set: `.github/get_rom.sh` downloads it and
+  checks the size and SHA-256 (`ESP8266_ROM_SHA256` in build.yml), and the zips get it in `bios/`
+  (the web zip next to the page). Without the setting they carry `bios/README.md` only (owner's
+  decision, 2026-10-08; it replaced "never in CI artifacts"). `roms/` is for games.
 
 ## Traps
 
