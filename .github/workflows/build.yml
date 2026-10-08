@@ -100,10 +100,12 @@ jobs:
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp "build/${{matrix.name}}" "$APP/Contents/MacOS/${{matrix.name}}"
           cp build/espboy_headless ./Release/
-          # the ROM goes in a bios folder next to the .app (how to get it: bios/README.md)
-          mkdir -p ./Release/bios
-          cp bios/README.md ./Release/bios/
-          if [ -f bios/esp8266_rom.bin ]; then cp bios/esp8266_rom.bin ./Release/bios/; fi
+          # the bios folder goes inside the bundle, in Contents/Resources (SDL's base
+          # path for a .app, where the emulator looks first), so the ROM travels
+          # with the .app wherever macOS runs it from (how to get it: bios/README.md)
+          mkdir -p "$APP/Contents/Resources/bios"
+          cp bios/README.md "$APP/Contents/Resources/bios/"
+          if [ -f bios/esp8266_rom.bin ]; then cp bios/esp8266_rom.bin "$APP/Contents/Resources/bios/"; fi
           cp ./README.md ./LICENSE ./Release/
           P="$APP/Contents/Info.plist"
           echo "<?xml version='1.0' encoding='UTF-8'?>" > "$P"

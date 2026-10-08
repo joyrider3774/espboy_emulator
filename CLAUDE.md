@@ -166,11 +166,10 @@ python tools/serial_test.py COM3 6 | grep TIMING     # device
 - **The ROM** is read at start from a file, never embedded in the program and not in the
   repository: `bios/` (the folder for it, with `bios/README.md` on how to read it from any
   board), the current folder, next to the executable, `--rom`, `$ESPBOY_ROM`; in a macOS .app
-  also next to the bundle and in a `bios` folder there. A quarantined .app opened where it was
-  unzipped runs from a translocated copy (`.../AppTranslocation/<id>/d/`): `untranslocate()` in
-  main.c asks the Security framework (`SecTranslocateCreateOriginalPathForURL`, dlopen'ed) for
-  the real place, and the startup message explains it when that fails too. Not testable here
-  (no Mac): check on the CI's macOS builds. CI builds include it when the repository
+  also next to the bundle and in a `bios` folder there. The macOS CI builds put `bios/` inside
+  the bundle, in `Contents/Resources` (SDL's base path, searched first), before the ad hoc
+  codesign, so it travels with the .app (a quarantined app opened where it was unzipped runs
+  from a translocated copy, which loses anything next to it). CI builds include it when the repository
   setting `ESP8266_ROM_URL` (secret or variable) is set: `.github/get_rom.sh` downloads it and
   checks the size and SHA-256 (`ESP8266_ROM_SHA256` in build.yml), and the zips get it in `bios/`
   (the web zip next to the page). Without the setting they carry `bios/README.md` only (owner's

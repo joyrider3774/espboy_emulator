@@ -48,11 +48,9 @@ ESP8266 board (an ESPboy, a D1 mini, a NodeMCU) with esptool, as
 to the emulator (on macOS next to the `.app`). It is read when the emulator starts; it is
 also found next to the emulator, in the current folder, or via `--rom` / `$ESPBOY_ROM`.
 
-On macOS, a downloaded app opened straight from where it was unzipped is run by macOS from a
-temporary copy ("App Translocation"), away from its `bios` folder. The emulator asks macOS
-where the original is and looks there; should it still say it has no ROM, move
-`ESPboy_Emulator.app` with Finder (to another folder and back is enough) and open it again,
-or clear the download mark with `xattr -dr com.apple.quarantine ESPboy_Emulator.app`.
+On macOS the release builds keep the `bios` folder inside the app bundle
+(`ESPboy_Emulator.app/Contents/Resources/bios`), so the ROM goes wherever the app goes. A
+`bios` folder next to the `.app` works too.
 
 | Key | ESPboy |
 |---|---|
