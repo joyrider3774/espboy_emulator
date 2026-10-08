@@ -23,6 +23,10 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
+#ifdef __APPLE__
+#include <dlfcn.h>
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 
 #define W 128
 #define H 128
@@ -293,15 +297,49 @@ static void load_flash_save(App *app)
 }
 
 #ifndef __EMSCRIPTEN__
+#ifdef __APPLE__
+/* macOS runs a downloaded (quarantined) app it was not moved by Finder from a
+   random read-only copy ("App Translocation": .../AppTranslocation/<id>/d/
+   X.app), so nothing that was next to the .app is next to the copy. The
+   Security framework tells where the original is; loaded at run time, as the
+   function is not in its headers */
+static bool untranslocate(const char *path, char *out, size_t n)
+{
+    if (!SDL_strstr(path, "/AppTranslocation/")) return false;
+    void *sec = dlopen("/System/Library/Frameworks/Security.framework/Security", RTLD_LAZY);
+    if (!sec) return false;
+    typedef CFURLRef (*OriginalPathFn)(CFURLRef, CFErrorRef *);
+    OriginalPathFn original = (OriginalPathFn)dlsym(sec, "SecTranslocateCreateOriginalPathForURL");
+    bool ok = false;
+    if (original) {
+        CFURLRef url = CFURLCreateFromFileSystemRepresentation(NULL, (const UInt8 *)path,
+                                                               (CFIndex)SDL_strlen(path), true);
+        CFURLRef real = url ? original(url, NULL) : NULL;
+        if (real) {
+            ok = CFURLGetFileSystemRepresentation(real, true, (UInt8 *)out, (CFIndex)n);
+            CFRelease(real);
+        }
+        if (url) CFRelease(url);
+    }
+    dlclose(sec);
+    if (ok && out[0] && out[SDL_strlen(out) - 1] != '/') SDL_strlcat(out, "/", n);
+    return ok;
+}
+#endif
+
 /* The ROM next to the emulator, where the release builds put it, or in a
    bios folder beside it. Started from a file manager the current folder is
    not the emulator's. In a macOS .app SDL's base path is the bundle's
-   Contents/Resources: there, and then next to the bundle (and in a rom
-   folder next to it) */
+   Contents/Resources: there, and then next to the bundle (and in a bios
+   folder next to it), the bundle's real place when macOS translocated it */
 static void find_rom_near_app(char *out, size_t n)
 {
     const char *base = SDL_GetBasePath();
     if (!base) { out[0] = 0; return; }
+#ifdef __APPLE__
+    static char real_base[1024];
+    if (untranslocate(base, real_base, sizeof real_base)) base = real_base;
+#endif
     char dirs[2][1024];
     int ndirs = 0;
     SDL_strlcpy(dirs[ndirs++], base, sizeof dirs[0]);
@@ -320,9 +358,12 @@ static void find_rom_near_app(char *out, size_t n)
             SDL_snprintf(out, n, "%s%s", dirs[i], names[k]);
             SDL_IOStream *f = SDL_IOFromFile(out, "rb");
             if (f) { SDL_CloseIO(f); return; }
+            SDL_Log("ESP8266 ROM not at %s: %s", out, SDL_GetError());
         }
     }
-    SDL_snprintf(out, n, "%sesp8266_rom.bin", base);
+    /* not found: name the place it is expected, the bios folder next to the
+       emulator (next to the .app), for the message that says so */
+    SDL_snprintf(out, n, "%sbios/esp8266_rom.bin", dirs[ndirs - 1]);
 }
 #endif
 
@@ -801,8 +842,18 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 #ifdef __EMSCRIPTEN__
         show_message(app, "Open an ESPboy .bin to start");
 #else
-        show_message(app, app->rom_ok ? "Drop an ESPboy .bin here, or press F3"
-                                      : "No ESP8266 ROM found: pass --rom esp8266_rom.bin");
+        const char *base = SDL_GetBasePath();
+        if (app->rom_ok)
+            show_message(app, "Drop an ESPboy .bin here, or press F3");
+        else if (base && SDL_strstr(base, "/AppTranslocation/"))
+            /* macOS runs the app from a temporary copy and would not say where
+               the original is: once moved with Finder it runs from its place */
+            show_message(app, "No ROM: macOS runs this app from a temporary copy. "
+                              "Move ESPboy_Emulator.app with Finder, then open it again");
+        else
+            /* where it looked last (the bios folder next to the emulator, or
+               next to the .app), so a wrong place shows */
+            show_message(app, "No ESP8266 ROM in %s (put esp8266_rom.bin there, or pass --rom)", app->rom);
 #endif
     }
     app->last_ticks = SDL_GetTicksNS();
