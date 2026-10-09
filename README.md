@@ -37,10 +37,22 @@ temperature, so thermometer programs have something to show.
 ## Using it
 
 ```
-ESPboy_Emulator game.bin [--rom esp8266_rom.bin] [--integer-scale]
+ESPboy_Emulator game.bin [options]
 ```
 
 or drop a `.bin` on the window, or press F3.
+
+### Command line
+
+| Option | What it does |
+|---|---|
+| `--rom esp8266_rom.bin` | the ESP8266's mask ROM (default: `bios/esp8266_rom.bin` or `esp8266_rom.bin` next to the emulator or in the current folder, or `$ESPBOY_ROM`; see below) |
+| `--speaker` | the small speaker's sound, for this run |
+| `--no-speaker` | the bare pin signal, for this run (F7 switches between the two and remembers the choice) |
+| `--integer-scale` | whole multiples of the screen only, for this run |
+| `--no-integer-scale` | fill the window, for this run (F8 switches between the two and remembers the choice) |
+| `--scale N` | the window's first size, N times the 128x128 screen (1-10, default 4) |
+| `--help`, `-h` | list the options and exit (in a message box on Windows) |
 
 The ESP8266 mask ROM is needed and is not included (it is Espressif's): read it out of any
 ESP8266 board (an ESPboy, a D1 mini, a NodeMCU) with esptool, as

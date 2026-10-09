@@ -738,8 +738,43 @@ static void render_screen(App *app)
     }
 }
 
+static const char usage_text[] =
+    "ESPboy_Emulator [game.bin] [options]\n"
+    "\n"
+    "game.bin: an ESPboy / Arduino flash image (or drop one on the window, or F3)\n"
+    "\n"
+    "  --rom esp8266_rom.bin   the ESP8266's mask ROM (default: esp8266_rom.bin\n"
+    "                          or bios/esp8266_rom.bin, here or next to the\n"
+    "                          emulator)\n"
+    "  --speaker               the small speaker's sound, this run\n"
+    "  --no-speaker            the bare pin signal, this run (F7 switches,\n"
+    "                          remembered)\n"
+    "  --integer-scale         whole multiples of the screen only, this run\n"
+    "  --no-integer-scale      fill the window, this run (F8 switches, remembered)\n"
+    "  --scale N               the window's first size: N x 128 (1-10, default 4)\n"
+    "  --help, -h              this text\n"
+    "\n"
+    "F1 in the emulator lists the keys.\n";
+
+/* --help: the options, before any window. A Windows build has no console, so
+   it shows them in a message box; elsewhere they go to the terminal */
+static bool show_usage(int argc, char *argv[])
+{
+    for (int i = 1; i < argc; i++)
+        if (!SDL_strcmp(argv[i], "--help") || !SDL_strcmp(argv[i], "-h")) {
+#ifdef _WIN32
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "ESPboy Emulator", usage_text, NULL);
+#else
+            fputs(usage_text, stdout);
+#endif
+            return true;
+        }
+    return false;
+}
+
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
+    if (show_usage(argc, argv)) return SDL_APP_SUCCESS;
     SDL_SetAppMetadata("ESPboy Emulator", "0.1", "com.joyrider3774.espboy_emulator");
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
         SDL_Log("SDL_Init: %s", SDL_GetError());
@@ -753,7 +788,11 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
     app->volume = 1.0f;
     load_settings(app);
 
-    const int scale = 4;
+    /* --scale N: the window's first size, N times the 128x128 screen (1-10, default 4). Read
+       here because the window is made before the rest of the command line is */
+    int scale = 4;
+    for (int i = 1; i + 1 < argc; i++)
+        if (!SDL_strcmp(argv[i], "--scale")) scale = SDL_clamp(SDL_atoi(argv[i + 1]), 1, 10);
     if (!SDL_CreateWindowAndRenderer("ESPboy Emulator", W * scale, H * scale + BAR_H,
                                      SDL_WINDOW_RESIZABLE, &app->window, &app->renderer)) {
         SDL_Log("window: %s", SDL_GetError());
@@ -775,6 +814,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
         else if (!SDL_strcmp(argv[i], "--no-integer-scale")) app->integer_scale = false;
         else if (!SDL_strcmp(argv[i], "--speaker")) app->audio.speaker = true;
         else if (!SDL_strcmp(argv[i], "--no-speaker")) app->audio.speaker = false;
+        else if (!SDL_strcmp(argv[i], "--scale") && i + 1 < argc) i++;     /* read above, before the window */
         else if (argv[i][0] != '-') program = argv[i];
     }
     set_scale_mode(app);
